@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
-/* @layer base {
-  * {
-    outline: 1px solid rgba(255, 0, 0, 0.5) !important;
-    background: rgba(255, 0, 0, 0.05) !important;
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
   }
-} */
+}
