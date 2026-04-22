@@ -1,0 +1,877 @@
+=== src/components/button/button.tsx ===
+import { ButtonHTMLAttributes, FC } from "react";
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "primary" | "danger" | "ghost";
+}
+
+export const Button: FC<ButtonProps> = ({
+  variant = "primary",
+  className,
+  ...props
+}) => {
+  const base =
+    "px-4 py-2 rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
+  const variants = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm",
+    danger: "bg-red-100 text-red-600 hover:bg-red-600 hover:text-white",
+    ghost: "bg-gray-100 text-gray-600 hover:bg-gray-200",
+  };
+
+  return (
+    <button
+      className={`${base} ${variants[variant]} ${className}`}
+      {...props}
+    />
+  );
+};
+
+=== src/components/button/index.ts ===
+export * from "./button";
+
+=== src/components/card/card.tsx ===
+import { FC, ReactNode } from "react";
+
+export const Card: FC<{ children: ReactNode; title?: string }> = ({
+  children,
+  title,
+}) => (
+  <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    {title && (
+      <div className="border-b border-gray-100 bg-gray-50/50 px-6 py-4">
+        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+      </div>
+    )}
+    <div className="p-6">{children}</div>
+  </div>
+);
+
+=== src/components/card/index.ts ===
+export * from "./card";
+
+=== src/components/index.ts ===
+export * from "./button";
+export * from "./card";
+
+=== src/index.css ===
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
+  }
+}
+
+=== src/main.tsx ===
+import { router } from "@/routes";
+import { RouterProvider } from "@tanstack/react-router";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
+);
+
+=== src/pages/home/home.tsx ===
+import { Link } from "@tanstack/react-router";
+import { FC } from "react";
+
+export const Home: FC = () => {
+  return (
+    <div className="flex flex-col h-full">
+      <h1 className="text-6xl font-extrabold tracking-tight text-blue-800 text-center">
+        Sistema Eleitoral Combinatório
+      </h1>
+      <div className="mt-32 h-max flex justify-center">
+        <Link
+          to="/setup"
+          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 active:scale-95"
+        >
+          Começar
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+=== src/pages/home/index.ts ===
+export * from "./home";
+
+=== src/pages/index.ts ===
+export * from "./home";
+export * from "./results";
+export * from "./setup";
+export * from "./vote";
+
+=== src/pages/results/index.ts ===
+export * from "./results";
+
+=== src/pages/results/results.tsx ===
+import { useElectionStore } from "@/stores";
+import { Ballot, ElectionConfig } from "@/types";
+import { computeElection } from "@/utils";
+import { Navigate } from "@tanstack/react-router";
+import { FC, useEffect, useState } from "react";
+
+type ResultsPageProps = {
+  config: ElectionConfig;
+  ballots: Ballot[];
+};
+
+const ResultsPage: FC<ResultsPageProps> = ({ config, ballots }) => {
+  const [electionResults, setElectionResults] = useState<
+    null | Record<string, string>[]
+  >(null);
+
+  useEffect(() => {
+    setElectionResults(computeElection(config, ballots));
+  }, [ballots, config]);
+
+  return electionResults === null ? (
+    <>computando</>
+  ) : (
+    <>{JSON.stringify(electionResults)}</>
+  );
+};
+
+export const Results: FC = () => {
+  const { config, ballots } = useElectionStore();
+
+  return config === null || ballots === null ? (
+    <Navigate to="/vote" />
+  ) : (
+    <ResultsPage config={config} ballots={ballots} />
+  );
+};
+
+=== src/pages/setup/index.ts ===
+export * from "./setup";
+
+=== src/pages/setup/setup.tsx ===
+import { Button, Card } from "@/components"; // Assume you export from an index or import directly
+import { useElectionStore } from "@/stores";
+import { Participant, Role } from "@/types";
+import { useNavigate } from "@tanstack/react-router";
+import { FC, useCallback, useState } from "react";
+const checkIfFormIsValid = (participants: Participant[], roles: Role[]) => {
+  const isParticipantsEmpty = participants.length < 1;
+  const isRolesEmpty = roles.length < 1;
+
+  const isThereEmptyParticipantName = participants.some(
+    (participant) => participant.name.length < 1,
+  );
+
+  const isThereEmptyRoleName = roles.some((role) => role.name.length < 1);
+
+  const isThereEqualParticipantsNames =
+    new Set(participants.map((participant) => participant.name)).size !==
+    participants.length;
+
+  const isThereEqualRolesNames =
+    new Set(roles.map((role) => role.name)).size !== roles.length;
+
+  console.log({
+    isParticipantsEmpty,
+    isRolesEmpty,
+    isThereEmptyParticipantName,
+    isThereEmptyRoleName,
+    isThereEqualParticipantsNames,
+    isThereEqualRolesNames,
+  });
+
+  if (
+    isParticipantsEmpty ||
+    isRolesEmpty ||
+    isThereEmptyParticipantName ||
+    isThereEmptyRoleName ||
+    isThereEqualParticipantsNames ||
+    isThereEqualRolesNames
+  )
+    return false;
+  return true;
+};
+
+export const Setup: FC = () => {
+  const navigate = useNavigate();
+  const { config, setConfig } = useElectionStore();
+
+  const [participants, setParticipants] = useState<Participant[]>(
+    config?.participants ?? [
+      { name: "Participante", eligible: true, voter: true },
+    ],
+  );
+  const [roles, setRoles] = useState<Role[]>(
+    config?.roles ?? [{ name: "Presidente", priority: 1 }],
+  );
+
+  const isFormValid = checkIfFormIsValid(participants, roles);
+
+  const handleSubmit = useCallback(() => {
+    // Ordenamos os cargos por prioridade antes de salvar para garantir consistência
+    const sortedRoles = [...roles].sort((a, b) => a.priority - b.priority);
+    setConfig({ participants, roles: sortedRoles });
+    navigate({ to: "/vote" });
+  }, [setConfig, participants, roles, navigate]);
+
+  return (
+    <div className="flex flex-col gap-8">
+      <header>
+        <h1 className="text-3xl font-bold text-gray-900">Configuração</h1>
+        <p className="text-gray-500">Defina os detalhes da sua eleição.</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <Card title="Participantes">
+          <div className="flex flex-col gap-4">
+            {participants.map((p, i) => (
+              <div
+                key={i}
+                className="flex flex-col p-3 border border-gray-100 rounded-lg gap-2 bg-gray-50/30"
+              >
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-1 bg-white border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                    type="text"
+                    value={p.name}
+                    placeholder="Nome do participante"
+                    onChange={(e) =>
+                      setParticipants(
+                        participants.toSpliced(i, 1, {
+                          ...p,
+                          name: e.target.value,
+                        }),
+                      )
+                    }
+                  />
+                  <Button
+                    variant="danger"
+                    className="px-3"
+                    onClick={() =>
+                      setParticipants(participants.toSpliced(i, 1))
+                    }
+                  >
+                    ✕
+                  </Button>
+                </div>
+                <div className="flex gap-4 text-sm text-gray-600 px-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={p.voter}
+                      onChange={(e) =>
+                        setParticipants(
+                          participants.toSpliced(i, 1, {
+                            ...p,
+                            voter: e.target.checked,
+                          }),
+                        )
+                      }
+                    />
+                    Votante
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={p.eligible}
+                      onChange={(e) =>
+                        setParticipants(
+                          participants.toSpliced(i, 1, {
+                            ...p,
+                            eligible: e.target.checked,
+                          }),
+                        )
+                      }
+                    />
+                    Elegível
+                  </label>
+                </div>
+              </div>
+            ))}
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setParticipants([
+                  ...participants,
+                  { name: "", eligible: true, voter: true },
+                ])
+              }
+            >
+              + Adicionar Participante
+            </Button>
+          </div>
+        </Card>
+
+        <Card title="Cargos e Prioridades">
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-gray-400 uppercase font-semibold mb-2">
+              Nome do Cargo / Prioridade
+            </p>
+            {roles.map((r, i) => (
+              <div
+                key={i}
+                className="flex gap-2 items-center p-3 border border-gray-100 rounded-lg bg-gray-50/30"
+              >
+                <input
+                  className="flex-1 px-3 py-1 bg-white border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-blue-500"
+                  type="text"
+                  value={r.name}
+                  placeholder="Ex: Presidente"
+                  onChange={(e) =>
+                    setRoles(
+                      roles.toSpliced(i, 1, { ...r, name: e.target.value }),
+                    )
+                  }
+                />
+
+                <div className="flex items-center gap-1">
+                  <input
+                    className="w-16 px-2 py-1 bg-white border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                    type="number"
+                    min="1"
+                    value={r.priority}
+                    onChange={(e) =>
+                      setRoles(
+                        roles.toSpliced(i, 1, {
+                          ...r,
+                          priority: parseInt(e.target.value) || 0,
+                        }),
+                      )
+                    }
+                  />
+                </div>
+
+                <Button
+                  variant="danger"
+                  className="px-3"
+                  onClick={() => setRoles(roles.toSpliced(i, 1))}
+                >
+                  ✕
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setRoles([...roles, { name: "", priority: roles.length + 1 }])
+              }
+            >
+              + Adicionar Cargo
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      <div className="flex justify-center pt-4">
+        <Button
+          disabled={!isFormValid}
+          onClick={handleSubmit}
+          className="w-full max-w-xs py-3 text-lg"
+        >
+          Iniciar Votação
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+=== src/pages/vote/index.ts ===
+export * from "./vote";
+
+=== src/pages/vote/vote.tsx ===
+import { Button, Card } from "@/components";
+import { useElectionStore } from "@/stores";
+import { ElectionConfig } from "@/types";
+import { Navigate, useNavigate } from "@tanstack/react-router";
+import { FC, useCallback, useState } from "react";
+
+const VoteContent: FC<{ config: ElectionConfig }> = ({ config }) => {
+  const { ballots, setBallots } = useElectionStore();
+  const navigate = useNavigate();
+
+  const electors = config.participants.filter((p) => p.voter);
+  const electables = config.participants.filter((p) => p.eligible);
+  const totalVotes = electors.length;
+
+  const [currentVote, setCurrentVote] = useState(1);
+  const [votes, setVotes] = useState(
+    ballots ??
+      Array.from({ length: totalVotes }, () =>
+        Object.fromEntries(
+          config.roles.map((r) => [
+            r.name,
+            Object.fromEntries(electables.map((e) => [e.name, false])),
+          ]),
+        ),
+      ),
+  );
+
+  const progress = (currentVote / totalVotes) * 100;
+
+  const handleContinue = useCallback(() => {
+    setBallots(votes);
+    navigate({ to: "/results" });
+  }, [setBallots, navigate, votes]);
+
+  if (currentVote > totalVotes) {
+    return (
+      <Card>
+        <div className="text-center py-10">
+          <div className="text-5xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold mb-2">Votação Concluída</h2>
+          <p className="text-gray-500 mb-6">Todos os votos foram coletados.</p>
+          <Button onClick={handleContinue} className="w-full max-w-xs">
+            Ver Resultados
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm font-medium text-gray-600">
+          <span>
+            Eleitor {currentVote} de {totalVotes}
+          </span>
+          <span>{Math.round(progress)}%</span>
+        </div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-600 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <Card
+        title={`Cédula de Votação - ${electors[currentVote - 1]?.name || "Eleitor"}`}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left border-b border-gray-100">
+                <th className="py-4 px-2 text-gray-400 text-xs uppercase">
+                  Cargo
+                </th>
+                {electables.map((p) => (
+                  <th key={p.name} className="py-4 px-2 text-center text-sm">
+                    {p.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {config.roles.map((role) => (
+                <tr key={role.name} className="hover:bg-gray-50/50">
+                  <td className="py-4 px-2 font-medium">{role.name}</td>
+                  {electables.map((p) => (
+                    <td key={p.name} className="py-4 px-2 text-center">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 accent-blue-600 cursor-pointer"
+                        checked={
+                          votes[currentVote - 1]?.[role.name]?.[p.name] ?? false
+                        }
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setVotes((prev) =>
+                            prev.map((b, i) =>
+                              i !== currentVote - 1
+                                ? b
+                                : {
+                                    ...b,
+                                    [role.name]: {
+                                      ...b[role.name],
+                                      [p.name]: checked,
+                                    },
+                                  },
+                            ),
+                          );
+                        }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={() => setCurrentVote((v) => v + 1)} className="px-8">
+          Próximo Voto
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export const Vote: FC = () => {
+  const { config } = useElectionStore();
+  if (!config) return <Navigate to="/setup" />;
+  return <VoteContent config={config} />;
+};
+
+=== src/routes/index.ts ===
+export * from "./root";
+
+=== src/routes/root.tsx ===
+import { Home, Results, Setup, Vote } from "@/pages";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+} from "@tanstack/react-router";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+
+const rootRoute = createRootRoute({
+  component: () => (
+    <div className="min-h-screen flex flex-col">
+      <nav className="bg-white border-b border-gray-200 p-4 mb-6">
+        <h1 className="text-xl font-bold text-center text-blue-600 italic">
+          Bing-Bongson
+        </h1>
+      </nav>
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 pb-12 ">
+        <Outlet />
+      </main>
+      <TanStackRouterDevtools />
+    </div>
+  ),
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: () => <Home />,
+});
+
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/setup",
+  component: () => <Setup />,
+});
+
+const voteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/vote",
+  component: () => <Vote />,
+});
+
+const resultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results",
+  component: () => <Results />,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  setupRoute,
+  voteRoute,
+  resultsRoute,
+]);
+
+export const router = createRouter({ routeTree });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
+=== src/stores/election-store.ts ===
+import { Ballot, ElectionConfig } from "@/types";
+import { create } from "zustand";
+
+interface ElectionStore {
+  config: ElectionConfig | null;
+  ballots: Ballot[] | null;
+  setConfig: (config: ElectionConfig) => void;
+  setBallots: (ballots: Ballot[] | null) => void;
+}
+
+export const useElectionStore = create<ElectionStore>()((set) => ({
+  config: null,
+  ballots: null,
+  setConfig: (config) => set({ config }),
+  setBallots: (ballots) => set({ ballots }),
+}));
+
+=== src/stores/index.ts ===
+export * from "./election-store";
+
+=== src/types/ballot.ts ===
+export type Ballot = Record<string, Record<string, boolean>>;
+
+=== src/types/election-config.ts ===
+import { Participant } from "./participant";
+import { Role } from "./role";
+
+export type ElectionConfig = {
+  participants: Participant[];
+  roles: Role[];
+};
+
+=== src/types/index.ts ===
+export * from "./ballot";
+export * from "./election-config";
+export * from "./participant";
+export * from "./role";
+
+=== src/types/participant.ts ===
+export type Participant = {
+  name: string;
+  voter: boolean;
+  eligible: boolean;
+};
+
+=== src/types/role.ts ===
+export type Role = {
+  name: string;
+  priority: number;
+};
+
+=== src/utils/brand/brand.ts ===
+declare const __brand: unique symbol;
+
+export type Brand<T> = T & { [__brand]: never };
+
+=== src/utils/brand/index.ts ===
+export * from "./brand";
+
+=== src/utils/election-computation/election-computation.ts ===
+import { Ballot, ElectionConfig, Role } from "@/types";
+import { enumerate } from "../enumerate";
+import { generateCartesianProduct } from "../generate-cartesian-product";
+import { getHarmonicNumber } from "../get-harmonic-number";
+import { isNumberNonNegativeInteger } from "../non-negative-integer";
+
+export type ComputationSignal =
+  | { tag: "working"; currentCombination: number; totalCombinations: number }
+  | { tag: "done"; results: Record<string, string>[] };
+
+const orderRolesByPriority = (roles: Role[]): string[][] => {
+  const priorityToRoles = new Map<number, string[]>();
+  for (const role of roles) {
+    if (!priorityToRoles.has(role.priority))
+      priorityToRoles.set(role.priority, []);
+    priorityToRoles.get(role.priority)!.push(role.name);
+  }
+  return [...priorityToRoles.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, names]) => names);
+};
+
+function isRealityBroken(reality: string[][], eligibles: string[]): boolean {
+  if (reality.length === 0) return false;
+
+  const previousOutcomes = reality.slice(0, -1);
+  const outcomeToValidate = reality[reality.length - 1];
+
+  const roleCounts = new Map<string, number>(eligibles.map((e) => [e, 0]));
+  for (const outcome of previousOutcomes) {
+    for (const person of outcome) {
+      roleCounts.set(person, (roleCounts.get(person) ?? 0) + 1);
+    }
+  }
+
+  const lastRoundAssigned = new Set<string>(
+    previousOutcomes.length > 0
+      ? previousOutcomes[previousOutcomes.length - 1]
+      : [],
+  );
+
+  const priorityScoreOf = (person: string, counts: Map<string, number>) =>
+    (counts.get(person) ?? 0) * 2 + (lastRoundAssigned.has(person) ? 1 : 0);
+
+  const remaining = new Map<string, number>();
+  for (const person of outcomeToValidate) {
+    remaining.set(person, (remaining.get(person) ?? 0) + 1);
+  }
+
+  const tempCounts = new Map(roleCounts);
+  for (let slot = 0; slot < outcomeToValidate.length; slot++) {
+    const minScore = Math.min(
+      ...eligibles.map((p) => priorityScoreOf(p, tempCounts)),
+    );
+
+    const picked = eligibles.find(
+      (p) =>
+        (remaining.get(p) ?? 0) > 0 &&
+        priorityScoreOf(p, tempCounts) === minScore,
+    );
+
+    if (picked === undefined) return true;
+
+    remaining.set(picked, remaining.get(picked)! - 1);
+    tempCounts.set(picked, (tempCounts.get(picked) ?? 0) + 1);
+  }
+
+  return false;
+}
+
+export const computeElection = (
+  config: ElectionConfig,
+  ballots: Ballot[],
+): Record<string, string>[] => {
+  const eligibles = config.participants
+    .filter((p) => p.eligible)
+    .map((p) => p.name);
+
+  const orderedRoleGroups = orderRolesByPriority(config.roles);
+
+  let parallelRealities: string[][][] = [[]];
+
+  for (const currentRoles of orderedRoleGroups) {
+    let bestScoreThisRound = -Infinity;
+    let nextParallelRealities: string[][][] = [];
+
+    for (const reality of parallelRealities) {
+      let bestOutcomesForThisReality: string[][] = [];
+      let bestOutcomeScore = -Infinity;
+
+      for (const possibleOutcome of generateCartesianProduct(
+        currentRoles.length,
+        eligibles,
+      )) {
+        if (isRealityBroken([...reality, possibleOutcome], eligibles)) continue;
+
+        let possibleOutcomeTotalHarmonicApproval = 0;
+        for (const ballot of ballots) {
+          let numberOfBallotMatches = 0;
+          for (const [roleIndex, candidate] of enumerate(possibleOutcome)) {
+            const role = currentRoles[roleIndex];
+            if (ballot[role][candidate]) numberOfBallotMatches++;
+          }
+          if (!isNumberNonNegativeInteger(numberOfBallotMatches))
+            throw new Error(
+              "number of ballot matches is not a non-negative integer",
+            );
+          possibleOutcomeTotalHarmonicApproval += getHarmonicNumber(
+            numberOfBallotMatches,
+          );
+        }
+
+        if (possibleOutcomeTotalHarmonicApproval > bestOutcomeScore) {
+          bestOutcomeScore = possibleOutcomeTotalHarmonicApproval;
+          bestOutcomesForThisReality = [possibleOutcome];
+        } else if (possibleOutcomeTotalHarmonicApproval === bestOutcomeScore) {
+          bestOutcomesForThisReality.push(possibleOutcome);
+        }
+      }
+
+      if (bestOutcomeScore > bestScoreThisRound) {
+        bestScoreThisRound = bestOutcomeScore;
+        nextParallelRealities = bestOutcomesForThisReality.map((outcome) => [
+          ...reality,
+          outcome,
+        ]);
+      } else if (bestOutcomeScore === bestScoreThisRound) {
+        for (const outcome of bestOutcomesForThisReality) {
+          nextParallelRealities.push([...reality, outcome]);
+        }
+      }
+    }
+
+    parallelRealities = nextParallelRealities;
+  }
+
+  return parallelRealities.map((reality) => {
+    const assignments: Record<string, string> = {};
+    for (const [tierIndex, outcome] of enumerate(reality)) {
+      const roles = orderedRoleGroups[tierIndex];
+      for (const [roleIndex, candidate] of enumerate(outcome)) {
+        assignments[roles[roleIndex]] = candidate;
+      }
+    }
+    return assignments;
+  });
+};
+
+=== src/utils/election-computation/index.ts ===
+export * from "./election-computation";
+
+=== src/utils/enumerate/enumerate.ts ===
+export const enumerate = <T>(list: T[]): [index: number, item: T][] =>
+  list.map((item, index) => [index, item]);
+
+=== src/utils/enumerate/index.ts ===
+export * from "./enumerate";
+
+=== src/utils/generate-cartesian-product/generate-cartesian-product.ts ===
+export function* generateCartesianProduct<T>(width: number, pool: T[]) {
+  if (pool.length === 0 || width <= 0) return;
+
+  const indices: number[] = new Array(width).fill(0);
+
+  while (true) {
+    yield indices.map((index) => pool[index]);
+
+    let pointer = width - 1;
+    while (pointer >= 0 && indices[pointer] === pool.length - 1) {
+      indices[pointer] = 0;
+      pointer--;
+    }
+
+    if (pointer < 0) break;
+
+    indices[pointer]++;
+  }
+}
+
+=== src/utils/generate-cartesian-product/index.ts ===
+export * from "./generate-cartesian-product";
+
+=== src/utils/get-harmonic-number/get-harmonic-number.ts ===
+import { NonNegativeInteger } from "@/utils";
+
+const MAX_CACHE_SIZE = 10_000;
+
+const harmonicNumbersCache: number[] = [0];
+
+export const getHarmonicNumber = (n: NonNegativeInteger): number => {
+  if (n > MAX_CACHE_SIZE)
+    throw new RangeError(`n must not exceed ${MAX_CACHE_SIZE}`);
+
+  if (harmonicNumbersCache[n] !== undefined) return harmonicNumbersCache[n];
+
+  for (let i = harmonicNumbersCache.length; i <= n; i++) {
+    harmonicNumbersCache[i] = harmonicNumbersCache[i - 1] + 1 / i;
+  }
+
+  return harmonicNumbersCache[n];
+};
+
+=== src/utils/get-harmonic-number/index.ts ===
+export * from "./get-harmonic-number";
+
+=== src/utils/index.ts ===
+export * from "./brand";
+export * from "./election-computation";
+export * from "./enumerate";
+export * from "./generate-cartesian-product";
+export * from "./get-harmonic-number";
+export * from "./non-negative-integer";
+
+=== src/utils/non-negative-integer/index.ts ===
+export * from "./non-negative-integer";
+
+=== src/utils/non-negative-integer/non-negative-integer.ts ===
+import { Brand } from "../brand";
+
+export type NonNegativeInteger = Brand<number>;
+
+export const isNumberNonNegativeInteger = (
+  n: number,
+): n is NonNegativeInteger => n >= 0 && Number.isInteger(n);
+

@@ -9,7 +9,7 @@ const VoteContent: FC<{ config: ElectionConfig }> = ({ config }) => {
   const navigate = useNavigate();
 
   const electors = config.participants.filter((p) => p.voter);
-  const electables = config.participants.filter((p) => p.electable);
+  const electables = config.participants.filter((p) => p.eligible);
   const totalVotes = electors.length;
 
   const [currentVote, setCurrentVote] = useState(1);

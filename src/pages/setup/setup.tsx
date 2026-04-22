@@ -47,7 +47,7 @@ export const Setup: FC = () => {
 
   const [participants, setParticipants] = useState<Participant[]>(
     config?.participants ?? [
-      { name: "Participante", electable: true, voter: true },
+      { name: "Participante", eligible: true, voter: true },
     ],
   );
   const [roles, setRoles] = useState<Role[]>(
@@ -122,12 +122,12 @@ export const Setup: FC = () => {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={p.electable}
+                      checked={p.eligible}
                       onChange={(e) =>
                         setParticipants(
                           participants.toSpliced(i, 1, {
                             ...p,
-                            electable: e.target.checked,
+                            eligible: e.target.checked,
                           }),
                         )
                       }
@@ -142,7 +142,7 @@ export const Setup: FC = () => {
               onClick={() =>
                 setParticipants([
                   ...participants,
-                  { name: "", electable: true, voter: true },
+                  { name: "", eligible: true, voter: true },
                 ])
               }
             >

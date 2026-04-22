@@ -1,4 +1,4 @@
-import { Home, Setup, Vote } from "@/pages";
+import { Home, Results, Setup, Vote } from "@/pages";
 import {
   createRootRoute,
   createRoute,
@@ -44,7 +44,7 @@ const voteRoute = createRoute({
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results",
-  component: () => <>results</>,
+  component: () => <Results />,
 });
 
 const routeTree = rootRoute.addChildren([
