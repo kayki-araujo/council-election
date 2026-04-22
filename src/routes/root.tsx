@@ -12,7 +12,7 @@ const rootRoute = createRootRoute({
     <div className="min-h-screen flex flex-col">
       <nav className="bg-white border-b border-gray-200 p-4 mb-6">
         <h1 className="text-xl font-bold text-center text-blue-600 italic">
-          Bing-Bongson
+          CAST
         </h1>
       </nav>
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 pb-12 ">

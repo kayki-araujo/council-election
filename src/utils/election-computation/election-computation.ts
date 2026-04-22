@@ -1,147 +1,120 @@
-import { Ballot, ElectionConfig, Role } from "@/types";
+import { Ballot, Charter, Seat } from "@/types";
 import { enumerate } from "../enumerate";
 import { generateCartesianProduct } from "../generate-cartesian-product";
 import { getHarmonicNumber } from "../get-harmonic-number";
 import { isNumberNonNegativeInteger } from "../non-negative-integer";
 
-export type ComputationSignal =
-  | { tag: "working"; currentCombination: number; totalCombinations: number }
-  | { tag: "done"; results: Record<string, string>[] };
-
-const orderRolesByPriority = (roles: Role[]): string[][] => {
-  const priorityToRoles = new Map<number, string[]>();
-  for (const role of roles) {
-    if (!priorityToRoles.has(role.priority))
-      priorityToRoles.set(role.priority, []);
-    priorityToRoles.get(role.priority)!.push(role.name);
+const groupSeatsByTier = (seats: Seat[]): string[][] => {
+  const tierMap = new Map<number, string[]>();
+  for (const seat of seats) {
+    if (!tierMap.has(seat.priority)) tierMap.set(seat.priority, []);
+    tierMap.get(seat.priority)!.push(seat.name);
   }
-  return [...priorityToRoles.entries()]
+  return [...tierMap.entries()]
     .sort(([a], [b]) => a - b)
     .map(([, names]) => names);
 };
 
-function isRealityBroken(reality: string[][], eligibles: string[]): boolean {
-  if (reality.length === 0) return false;
+function isInvalidSlate(branch: string[][], eligibles: string[]): boolean {
+  if (branch.length === 0) return false;
 
-  const previousOutcomes = reality.slice(0, -1);
-  const outcomeToValidate = reality[reality.length - 1];
+  const previousTiers = branch.slice(0, -1);
+  const slate = branch[branch.length - 1];
 
-  const roleCounts = new Map<string, number>(eligibles.map((e) => [e, 0]));
-  for (const outcome of previousOutcomes) {
-    for (const person of outcome) {
-      roleCounts.set(person, (roleCounts.get(person) ?? 0) + 1);
+  const histories = new Map<string, number[]>();
+  for (const p of eligibles) {
+    const tierCounts = previousTiers.map(
+      (tier) => tier.filter((name) => name === p).length,
+    );
+    const total = tierCounts.reduce((a, b) => a + b, 0);
+    histories.set(p, [total, ...tierCounts]);
+  }
+
+  const compareTax = (a: string, b: string, h: Map<string, number[]>) => {
+    const hA = h.get(a)!;
+    const hB = h.get(b)!;
+    for (let i = 0; i < hA.length; i++) {
+      if (hA[i] !== hB[i]) return hA[i] - hB[i];
     }
+    return 0;
+  };
+
+  const pool = [...eligibles];
+  for (const appointed of slate) {
+    const idx = pool.indexOf(appointed);
+    if (idx > -1) pool.splice(idx, 1);
   }
 
-  const lastRoundAssigned = new Set<string>(
-    previousOutcomes.length > 0
-      ? previousOutcomes[previousOutcomes.length - 1]
-      : [],
-  );
-
-  const priorityScoreOf = (person: string, counts: Map<string, number>) =>
-    (counts.get(person) ?? 0) * 2 + (lastRoundAssigned.has(person) ? 1 : 0);
-
-  const remaining = new Map<string, number>();
-  for (const person of outcomeToValidate) {
-    remaining.set(person, (remaining.get(person) ?? 0) + 1);
-  }
-
-  const tempCounts = new Map(roleCounts);
-  for (let slot = 0; slot < outcomeToValidate.length; slot++) {
-    const minScore = Math.min(
-      ...eligibles.map((p) => priorityScoreOf(p, tempCounts)),
-    );
-
-    const picked = eligibles.find(
-      (p) =>
-        (remaining.get(p) ?? 0) > 0 &&
-        priorityScoreOf(p, tempCounts) === minScore,
-    );
-
-    if (picked === undefined) return true;
-
-    remaining.set(picked, remaining.get(picked)! - 1);
-    tempCounts.set(picked, (tempCounts.get(picked) ?? 0) + 1);
+  for (const appointed of slate) {
+    for (const leftOut of pool) {
+      if (compareTax(leftOut, appointed, histories) < 0) return true;
+    }
   }
 
   return false;
 }
 
-export const computeElection = (
-  config: ElectionConfig,
+export const convene = (
+  charter: Charter,
   ballots: Ballot[],
 ): Record<string, string>[] => {
-  const eligibles = config.participants
-    .filter((p) => p.eligible)
-    .map((p) => p.name);
+  const eligibles = charter.nominees
+    .filter((n) => n.isEligible)
+    .map((n) => n.name);
 
-  const orderedRoleGroups = orderRolesByPriority(config.roles);
+  const tiers = groupSeatsByTier(charter.seats);
+  let branches: string[][][] = [[]];
 
-  let parallelRealities: string[][][] = [[]];
-
-  for (const currentRoles of orderedRoleGroups) {
+  for (const tier of tiers) {
     let bestScoreThisRound = -Infinity;
-    let nextParallelRealities: string[][][] = [];
+    let nextBranches: string[][][] = [];
 
-    for (const reality of parallelRealities) {
-      let bestOutcomesForThisReality: string[][] = [];
-      let bestOutcomeScore = -Infinity;
+    for (const branch of branches) {
+      let bestSlates: string[][] = [];
+      let bestSlateScore = -Infinity;
 
-      for (const possibleOutcome of generateCartesianProduct(
-        currentRoles.length,
-        eligibles,
-      )) {
-        if (isRealityBroken([...reality, possibleOutcome], eligibles)) continue;
+      for (const slate of generateCartesianProduct(tier.length, eligibles)) {
+        if (isInvalidSlate([...branch, slate], eligibles)) continue;
 
-        let possibleOutcomeTotalHarmonicApproval = 0;
+        let slateScore = 0;
         for (const ballot of ballots) {
-          let numberOfBallotMatches = 0;
-          for (const [roleIndex, candidate] of enumerate(possibleOutcome)) {
-            const role = currentRoles[roleIndex];
-            if (ballot[role][candidate]) numberOfBallotMatches++;
+          let matches = 0;
+          for (const [seatIndex, nominee] of enumerate(slate)) {
+            if (ballot[tier[seatIndex]][nominee]) matches++;
           }
-          if (!isNumberNonNegativeInteger(numberOfBallotMatches))
-            throw new Error(
-              "number of ballot matches is not a non-negative integer",
-            );
-          possibleOutcomeTotalHarmonicApproval += getHarmonicNumber(
-            numberOfBallotMatches,
-          );
+          if (!isNumberNonNegativeInteger(matches))
+            throw new Error("match count is not a non-negative integer");
+          slateScore += getHarmonicNumber(matches);
         }
 
-        if (possibleOutcomeTotalHarmonicApproval > bestOutcomeScore) {
-          bestOutcomeScore = possibleOutcomeTotalHarmonicApproval;
-          bestOutcomesForThisReality = [possibleOutcome];
-        } else if (possibleOutcomeTotalHarmonicApproval === bestOutcomeScore) {
-          bestOutcomesForThisReality.push(possibleOutcome);
+        if (slateScore > bestSlateScore) {
+          bestSlateScore = slateScore;
+          bestSlates = [slate];
+        } else if (slateScore === bestSlateScore) {
+          bestSlates.push(slate);
         }
       }
 
-      if (bestOutcomeScore > bestScoreThisRound) {
-        bestScoreThisRound = bestOutcomeScore;
-        nextParallelRealities = bestOutcomesForThisReality.map((outcome) => [
-          ...reality,
-          outcome,
-        ]);
-      } else if (bestOutcomeScore === bestScoreThisRound) {
-        for (const outcome of bestOutcomesForThisReality) {
-          nextParallelRealities.push([...reality, outcome]);
+      if (bestSlateScore > bestScoreThisRound) {
+        bestScoreThisRound = bestSlateScore;
+        nextBranches = bestSlates.map((slate) => [...branch, slate]);
+      } else if (bestSlateScore === bestScoreThisRound) {
+        for (const slate of bestSlates) {
+          nextBranches.push([...branch, slate]);
         }
       }
     }
 
-    parallelRealities = nextParallelRealities;
+    branches = nextBranches;
   }
 
-  return parallelRealities.map((reality) => {
-    const assignments: Record<string, string> = {};
-    for (const [tierIndex, outcome] of enumerate(reality)) {
-      const roles = orderedRoleGroups[tierIndex];
-      for (const [roleIndex, candidate] of enumerate(outcome)) {
-        assignments[roles[roleIndex]] = candidate;
+  return branches.map((branch) => {
+    const appointments: Record<string, string> = {};
+    for (const [tierIndex, slate] of enumerate(branch)) {
+      for (const [seatIndex, nominee] of enumerate(slate)) {
+        appointments[tiers[tierIndex][seatIndex]] = nominee;
       }
     }
-    return assignments;
+    return appointments;
   });
 };

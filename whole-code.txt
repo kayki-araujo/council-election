@@ -49,9 +49,35 @@ export const Card: FC<{ children: ReactNode; title?: string }> = ({
 === src/components/card/index.ts ===
 export * from "./card";
 
+=== src/components/guard/guard.ts ===
+import { isSome, Option } from "@/utils";
+import { ReactNode } from "react";
+
+type GuardProps<T, E> = {
+  value: T;
+  clause: (value: T) => Option<E>;
+  then: (value: E) => ReactNode;
+  otherwise: () => ReactNode;
+};
+
+export const Guard = <T, E>({
+  value,
+  clause,
+  then,
+  otherwise,
+}: GuardProps<T, E>) => {
+  const result = clause(value);
+  if (isSome(result)) return then(result.value);
+  return otherwise();
+};
+
+=== src/components/guard/index.ts ===
+export * from "./guard";
+
 === src/components/index.ts ===
 export * from "./button";
 export * from "./card";
+export * from "./guard";
 
 === src/index.css ===
 @import "tailwindcss";
@@ -114,10 +140,11 @@ export * from "./vote";
 export * from "./results";
 
 === src/pages/results/results.tsx ===
+import { Button, Card } from "@/components";
 import { useElectionStore } from "@/stores";
 import { Ballot, ElectionConfig } from "@/types";
 import { computeElection } from "@/utils";
-import { Navigate } from "@tanstack/react-router";
+import { Link, Navigate } from "@tanstack/react-router";
 import { FC, useEffect, useState } from "react";
 
 type ResultsPageProps = {
@@ -131,24 +158,107 @@ const ResultsPage: FC<ResultsPageProps> = ({ config, ballots }) => {
   >(null);
 
   useEffect(() => {
-    setElectionResults(computeElection(config, ballots));
+    const timer = setTimeout(() => {
+      setElectionResults(computeElection(config, ballots));
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [ballots, config]);
 
-  return electionResults === null ? (
-    <>computando</>
-  ) : (
-    <>{JSON.stringify(electionResults)}</>
+  if (electionResults === null) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-6">
+        <div className="w-14 h-14 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-bold text-gray-800 animate-pulse">
+            Apurando os votos...
+          </h2>
+          <p className="text-gray-500 text-sm">
+            Isso pode levar alguns segundos dependendo do número de combinações.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-8 animate-in fade-in duration-500">
+      <header className="text-center space-y-3 mt-4">
+        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
+          Resultados Oficiais
+        </h1>
+        <p className="text-gray-500 text-lg">
+          A apuração combinatória foi concluída com sucesso.
+        </p>
+      </header>
+
+      {electionResults.length === 0 ? (
+        <Card>
+          <div className="text-center py-12 text-gray-500 text-lg">
+            Nenhum resultado válido encontrado com as configurações e votos
+            atuais.
+          </div>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {electionResults.length > 1 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-5 rounded-xl text-center shadow-sm">
+              <span className="font-bold text-lg block mb-1">
+                Atenção: Houve um empate!
+              </span>
+              Abaixo estão as <strong>{electionResults.length}</strong>{" "}
+              combinações ideais possíveis baseadas na aprovação harmônica.
+            </div>
+          )}
+
+          {electionResults.map((result, index) => (
+            <Card
+              key={index}
+              title={
+                electionResults.length > 1
+                  ? `Possibilidade ${index + 1}`
+                  : "Candidatos Eleitos"
+              }
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(result).map(([role, candidate]) => (
+                  <div
+                    key={role}
+                    className="flex flex-col p-4 bg-gray-50/50 border border-gray-100 rounded-xl transition-colors hover:bg-blue-50/30"
+                  >
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
+                      {role}
+                    </span>
+                    <span className="text-xl font-bold text-gray-800">
+                      {candidate}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-center pt-8 pb-4">
+        <Link to="/">
+          <Button className="px-10 py-4 text-lg shadow-lg hover:shadow-blue-200">
+            Iniciar Nova Eleição
+          </Button>
+        </Link>
+      </div>
+    </div>
   );
 };
 
 export const Results: FC = () => {
   const { config, ballots } = useElectionStore();
 
-  return config === null || ballots === null ? (
-    <Navigate to="/vote" />
-  ) : (
-    <ResultsPage config={config} ballots={ballots} />
-  );
+  if (!config || !ballots) {
+    return <Navigate to="/vote" />;
+  }
+
+  return <ResultsPage config={config} ballots={ballots} />;
 };
 
 === src/pages/setup/index.ts ===
@@ -672,49 +782,82 @@ const orderRolesByPriority = (roles: Role[]): string[][] => {
     .map(([, names]) => names);
 };
 
+// src/utils/election-computation/election-computation.ts
+
+/**
+ * Determines if a proposed outcome for the current tier violates the
+ * "Fair Workload" principle across all previous tiers.
+ */
 function isRealityBroken(reality: string[][], eligibles: string[]): boolean {
   if (reality.length === 0) return false;
 
-  const previousOutcomes = reality.slice(0, -1);
+  const previousTiers = reality.slice(0, -1);
   const outcomeToValidate = reality[reality.length - 1];
 
-  const roleCounts = new Map<string, number>(eligibles.map((e) => [e, 0]));
-  for (const outcome of previousOutcomes) {
-    for (const person of outcome) {
-      roleCounts.set(person, (roleCounts.get(person) ?? 0) + 1);
+  // 1. Pre-calculate the tax history for each candidate based on previous tiers.
+  // History = [TotalRoles, RolesInTier0, RolesInTier1, ..., RolesInTierN]
+  const histories = new Map<string, number[]>();
+  for (const p of eligibles) {
+    const tierCounts = previousTiers.map(
+      (tier) => tier.filter((name) => name === p).length,
+    );
+    const total = tierCounts.reduce((a, b) => a + b, 0);
+    histories.set(p, [total, ...tierCounts]);
+  }
+
+  /**
+   * Compares two candidates. Returns < 0 if 'a' is "less taxed" (higher priority).
+   */
+  const compareTax = (
+    a: string,
+    b: string,
+    currentHistories: Map<string, number[]>,
+  ) => {
+    const hA = currentHistories.get(a)!;
+    const hB = currentHistories.get(b)!;
+    for (let i = 0; i < hA.length; i++) {
+      if (hA[i] !== hB[i]) return hA[i] - hB[i];
     }
-  }
+    return 0;
+  };
 
-  const lastRoundAssigned = new Set<string>(
-    previousOutcomes.length > 0
-      ? previousOutcomes[previousOutcomes.length - 1]
-      : [],
+  // 2. Greedy Simulation for the Current Tier
+  // We simulate a fair assignment for the current tier's slots to see
+  // what the "ideal" least-taxed group would be.
+  const tempHistories = new Map(
+    eligibles.map((p) => [p, [...histories.get(p)!]]),
   );
+  const fairOutcome: string[] = [];
+  const currentTierIndex = reality.length;
 
-  const priorityScoreOf = (person: string, counts: Map<string, number>) =>
-    (counts.get(person) ?? 0) * 2 + (lastRoundAssigned.has(person) ? 1 : 0);
+  for (let i = 0; i < outcomeToValidate.length; i++) {
+    const sorted = [...eligibles].sort((a, b) =>
+      compareTax(a, b, tempHistories),
+    );
+    const picked = sorted[0];
 
-  const remaining = new Map<string, number>();
-  for (const person of outcomeToValidate) {
-    remaining.set(person, (remaining.get(person) ?? 0) + 1);
+    fairOutcome.push(picked);
+
+    // Increment tax for the next slot in the same tier
+    const h = tempHistories.get(picked)!;
+    h[0]++; // Increment Total
+    h[currentTierIndex] = (h[currentTierIndex] || 0) + 1; // Increment current tier count
   }
 
-  const tempCounts = new Map(roleCounts);
-  for (let slot = 0; slot < outcomeToValidate.length; slot++) {
-    const minScore = Math.min(
-      ...eligibles.map((p) => priorityScoreOf(p, tempCounts)),
-    );
+  // 3. Validation
+  // The reality is broken if someone in the actual outcome is "more taxed"
+  // than someone who was left out of the selection.
+  const pool = [...eligibles];
+  for (const assigned of outcomeToValidate) {
+    const idx = pool.indexOf(assigned);
+    if (idx > -1) pool.splice(idx, 1);
+  }
 
-    const picked = eligibles.find(
-      (p) =>
-        (remaining.get(p) ?? 0) > 0 &&
-        priorityScoreOf(p, tempCounts) === minScore,
-    );
-
-    if (picked === undefined) return true;
-
-    remaining.set(picked, remaining.get(picked)! - 1);
-    tempCounts.set(picked, (tempCounts.get(picked) ?? 0) + 1);
+  for (const assigned of outcomeToValidate) {
+    for (const leftOut of pool) {
+      // If someone left out is strictly less taxed than someone assigned, it's unfair.
+      if (compareTax(leftOut, assigned, histories) < 0) return true;
+    }
   }
 
   return false;
@@ -862,6 +1005,7 @@ export * from "./enumerate";
 export * from "./generate-cartesian-product";
 export * from "./get-harmonic-number";
 export * from "./non-negative-integer";
+export * from "./option";
 
 === src/utils/non-negative-integer/index.ts ===
 export * from "./non-negative-integer";
@@ -874,4 +1018,33 @@ export type NonNegativeInteger = Brand<number>;
 export const isNumberNonNegativeInteger = (
   n: number,
 ): n is NonNegativeInteger => n >= 0 && Number.isInteger(n);
+
+=== src/utils/option/index.ts ===
+export * from "./option";
+
+=== src/utils/option/option.ts ===
+const TAG = Symbol();
+
+type None = {
+  [TAG]: false;
+};
+
+const NONE: None = {
+  [TAG]: false,
+};
+
+type Some<T> = {
+  [TAG]: true;
+  value: T;
+};
+
+export type Option<T> = None | Some<T>;
+
+export const none = (): None => NONE;
+export const some = <T>(value: T): Some<T> => ({ [TAG]: true, value });
+
+export const isNone = <T>(option: Option<T>): option is None =>
+  option[TAG] === false;
+export const isSome = <T>(option: Option<T>): option is Some<T> =>
+  option[TAG] === true;
 

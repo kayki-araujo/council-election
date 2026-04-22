@@ -1,16 +1,16 @@
-import { Ballot, ElectionConfig } from "@/types";
+import { Ballot, Charter } from "@/types";
 import { create } from "zustand";
 
 interface ElectionStore {
-  config: ElectionConfig | null;
+  charter: Charter | null;
   ballots: Ballot[] | null;
-  setConfig: (config: ElectionConfig) => void;
+  setCharter: (charter: Charter) => void;
   setBallots: (ballots: Ballot[] | null) => void;
 }
 
 export const useElectionStore = create<ElectionStore>()((set) => ({
-  config: null,
+  charter: null,
   ballots: null,
-  setConfig: (config) => set({ config }),
+  setCharter: (charter) => set({ charter }),
   setBallots: (ballots) => set({ ballots }),
 }));

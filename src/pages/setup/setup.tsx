@@ -1,67 +1,37 @@
-import { Button, Card } from "@/components"; // Assume you export from an index or import directly
+import { Button, Card } from "@/components";
 import { useElectionStore } from "@/stores";
-import { Participant, Role } from "@/types";
+import { Nominee, Seat } from "@/types";
 import { useNavigate } from "@tanstack/react-router";
 import { FC, useCallback, useState } from "react";
-const checkIfFormIsValid = (participants: Participant[], roles: Role[]) => {
-  const isParticipantsEmpty = participants.length < 1;
-  const isRolesEmpty = roles.length < 1;
 
-  const isThereEmptyParticipantName = participants.some(
-    (participant) => participant.name.length < 1,
-  );
-
-  const isThereEmptyRoleName = roles.some((role) => role.name.length < 1);
-
-  const isThereEqualParticipantsNames =
-    new Set(participants.map((participant) => participant.name)).size !==
-    participants.length;
-
-  const isThereEqualRolesNames =
-    new Set(roles.map((role) => role.name)).size !== roles.length;
-
-  console.log({
-    isParticipantsEmpty,
-    isRolesEmpty,
-    isThereEmptyParticipantName,
-    isThereEmptyRoleName,
-    isThereEqualParticipantsNames,
-    isThereEqualRolesNames,
-  });
-
-  if (
-    isParticipantsEmpty ||
-    isRolesEmpty ||
-    isThereEmptyParticipantName ||
-    isThereEmptyRoleName ||
-    isThereEqualParticipantsNames ||
-    isThereEqualRolesNames
-  )
+const isCharterValid = (nominees: Nominee[], seats: Seat[]): boolean => {
+  if (nominees.length < 1 || seats.length < 1) return false;
+  if (nominees.some((n) => n.name.length < 1)) return false;
+  if (seats.some((s) => s.name.length < 1)) return false;
+  if (new Set(nominees.map((n) => n.name)).size !== nominees.length)
     return false;
+  if (new Set(seats.map((s) => s.name)).size !== seats.length) return false;
   return true;
 };
 
 export const Setup: FC = () => {
   const navigate = useNavigate();
-  const { config, setConfig } = useElectionStore();
+  const { charter, setCharter } = useElectionStore();
 
-  const [participants, setParticipants] = useState<Participant[]>(
-    config?.participants ?? [
-      { name: "Participante", eligible: true, voter: true },
+  const [nominees, setNominees] = useState<Nominee[]>(
+    charter?.nominees ?? [
+      { name: "Participante", isEligible: true, isElector: true },
     ],
   );
-  const [roles, setRoles] = useState<Role[]>(
-    config?.roles ?? [{ name: "Presidente", priority: 1 }],
+  const [seats, setSeats] = useState<Seat[]>(
+    charter?.seats ?? [{ name: "Presidente", priority: 1 }],
   );
 
-  const isFormValid = checkIfFormIsValid(participants, roles);
-
   const handleSubmit = useCallback(() => {
-    // Ordenamos os cargos por prioridade antes de salvar para garantir consistência
-    const sortedRoles = [...roles].sort((a, b) => a.priority - b.priority);
-    setConfig({ participants, roles: sortedRoles });
+    const sortedSeats = [...seats].sort((a, b) => a.priority - b.priority);
+    setCharter({ nominees, seats: sortedSeats });
     navigate({ to: "/vote" });
-  }, [setConfig, participants, roles, navigate]);
+  }, [setCharter, nominees, seats, navigate]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -73,7 +43,7 @@ export const Setup: FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <Card title="Participantes">
           <div className="flex flex-col gap-4">
-            {participants.map((p, i) => (
+            {nominees.map((n, i) => (
               <div
                 key={i}
                 className="flex flex-col p-3 border border-gray-100 rounded-lg gap-2 bg-gray-50/30"
@@ -82,12 +52,12 @@ export const Setup: FC = () => {
                   <input
                     className="flex-1 px-3 py-1 bg-white border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
                     type="text"
-                    value={p.name}
+                    value={n.name}
                     placeholder="Nome do participante"
                     onChange={(e) =>
-                      setParticipants(
-                        participants.toSpliced(i, 1, {
-                          ...p,
+                      setNominees(
+                        nominees.toSpliced(i, 1, {
+                          ...n,
                           name: e.target.value,
                         }),
                       )
@@ -96,9 +66,7 @@ export const Setup: FC = () => {
                   <Button
                     variant="danger"
                     className="px-3"
-                    onClick={() =>
-                      setParticipants(participants.toSpliced(i, 1))
-                    }
+                    onClick={() => setNominees(nominees.toSpliced(i, 1))}
                   >
                     ✕
                   </Button>
@@ -107,12 +75,12 @@ export const Setup: FC = () => {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={p.voter}
+                      checked={n.isElector}
                       onChange={(e) =>
-                        setParticipants(
-                          participants.toSpliced(i, 1, {
-                            ...p,
-                            voter: e.target.checked,
+                        setNominees(
+                          nominees.toSpliced(i, 1, {
+                            ...n,
+                            isElector: e.target.checked,
                           }),
                         )
                       }
@@ -122,12 +90,12 @@ export const Setup: FC = () => {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={p.eligible}
+                      checked={n.isEligible}
                       onChange={(e) =>
-                        setParticipants(
-                          participants.toSpliced(i, 1, {
-                            ...p,
-                            eligible: e.target.checked,
+                        setNominees(
+                          nominees.toSpliced(i, 1, {
+                            ...n,
+                            isEligible: e.target.checked,
                           }),
                         )
                       }
@@ -140,9 +108,9 @@ export const Setup: FC = () => {
             <Button
               variant="ghost"
               onClick={() =>
-                setParticipants([
-                  ...participants,
-                  { name: "", eligible: true, voter: true },
+                setNominees([
+                  ...nominees,
+                  { name: "", isEligible: true, isElector: true },
                 ])
               }
             >
@@ -156,7 +124,7 @@ export const Setup: FC = () => {
             <p className="text-xs text-gray-400 uppercase font-semibold mb-2">
               Nome do Cargo / Prioridade
             </p>
-            {roles.map((r, i) => (
+            {seats.map((s, i) => (
               <div
                 key={i}
                 className="flex gap-2 items-center p-3 border border-gray-100 rounded-lg bg-gray-50/30"
@@ -164,36 +132,32 @@ export const Setup: FC = () => {
                 <input
                   className="flex-1 px-3 py-1 bg-white border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-blue-500"
                   type="text"
-                  value={r.name}
+                  value={s.name}
                   placeholder="Ex: Presidente"
                   onChange={(e) =>
-                    setRoles(
-                      roles.toSpliced(i, 1, { ...r, name: e.target.value }),
+                    setSeats(
+                      seats.toSpliced(i, 1, { ...s, name: e.target.value }),
                     )
                   }
                 />
-
-                <div className="flex items-center gap-1">
-                  <input
-                    className="w-16 px-2 py-1 bg-white border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                    type="number"
-                    min="1"
-                    value={r.priority}
-                    onChange={(e) =>
-                      setRoles(
-                        roles.toSpliced(i, 1, {
-                          ...r,
-                          priority: parseInt(e.target.value) || 0,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-
+                <input
+                  className="w-16 px-2 py-1 bg-white border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                  type="number"
+                  min="1"
+                  value={s.priority}
+                  onChange={(e) =>
+                    setSeats(
+                      seats.toSpliced(i, 1, {
+                        ...s,
+                        priority: parseInt(e.target.value) || 0,
+                      }),
+                    )
+                  }
+                />
                 <Button
                   variant="danger"
                   className="px-3"
-                  onClick={() => setRoles(roles.toSpliced(i, 1))}
+                  onClick={() => setSeats(seats.toSpliced(i, 1))}
                 >
                   ✕
                 </Button>
@@ -202,7 +166,7 @@ export const Setup: FC = () => {
             <Button
               variant="ghost"
               onClick={() =>
-                setRoles([...roles, { name: "", priority: roles.length + 1 }])
+                setSeats([...seats, { name: "", priority: seats.length + 1 }])
               }
             >
               + Adicionar Cargo
@@ -213,7 +177,7 @@ export const Setup: FC = () => {
 
       <div className="flex justify-center pt-4">
         <Button
-          disabled={!isFormValid}
+          disabled={!isCharterValid(nominees, seats)}
           onClick={handleSubmit}
           className="w-full max-w-xs py-3 text-lg"
         >

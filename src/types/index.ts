@@ -1,4 +1,4 @@
 export * from "./ballot";
-export * from "./election-config";
-export * from "./participant";
-export * from "./role";
+export * from "./charter";
+export * from "./nominee";
+export * from "./seat";
